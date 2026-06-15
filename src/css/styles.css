@@ -219,7 +219,7 @@ main {
 }
 
 .repositories {
-  display: grid;
+  display: flex;
   flex-wrap: wrap;
   gap: 2rem;
   justify-content: center;
