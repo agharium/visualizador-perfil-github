@@ -1,36 +1,113 @@
-import { fetchGithubUserRepos, fetchUserProfile } from './api.js';
-import { showLoading, renderProfile, showError, clearResults } from './ui.js';
+(function () {
+    const inputSearch = document.getElementById('input-search');
+    const btnSearch = document.getElementById('btn-search');
+    const themeToggle = document.getElementById('theme-toggle');
+    const { fetchGithubUserRepos, fetchUserProfile } = window.githubApi;
+    const { renderProfile, showError, showLoading } = window.githubUi;
+    let currentUserData = null;
+    let currentUserRepos = [];
+    let currentSortType = 'lastCommit';
 
-const inputSearch = document.getElementById('input-search');
-const btnSearch = document.getElementById('btn-search');
+    const updateThemeToggle = () => {
+        const isDarkTheme = document.documentElement.dataset.theme === 'dark';
 
-const handleSearch = async () => {
-    const userName = inputSearch.value.trim();
+        themeToggle.setAttribute('aria-pressed', String(isDarkTheme));
+    };
 
-    if (!userName) {
-        showError('Por favor, digite um nome de usuário do GitHub.');
-        return;
-    }
+    const toggleTheme = () => {
+        const isDarkTheme = document.documentElement.dataset.theme === 'dark';
+        const nextTheme = isDarkTheme ? 'light' : 'dark';
 
-    showLoading();
+        if (nextTheme === 'dark') {
+            document.documentElement.dataset.theme = 'dark';
+        } else {
+            delete document.documentElement.dataset.theme;
+        }
 
-    try {
-        const userData = await fetchUserProfile(userName);
-        const userRepos = await fetchGithubUserRepos(userName);
-        console.log(userRepos);
-        renderProfile(userData, userRepos);
+        try {
+            localStorage.setItem('theme', nextTheme);
+        } catch (error) {
+            console.warn('Não foi possível salvar a preferência de tema.', error);
+        }
 
-    } catch (error) {
-        console.error('Erro ao buscar perfil do usuário:', error);
-        showError('Usuário não encontrado. Por favor, verifique o nome do usuário e tente novamente.');
-    }
-};
+        updateThemeToggle();
+    };
 
-btnSearch.addEventListener('click', handleSearch);
+    const getSortValue = (repo, sortType) => {
+        const sortValues = {
+            lastCommit: Date.parse(repo.lastCommitDate) || 0,
+            stars: repo.stargazers_count || 0,
+            forks: repo.forks_count || 0,
+            watchers: repo.watchers_count || 0
+        };
 
-// Permite buscar ao pressionar Enter
-inputSearch.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        handleSearch();
-    }
-});
+        return sortValues[sortType] || 0;
+    };
+
+    const sortRepositories = (repositories, sortType) => {
+        return [...repositories].sort((firstRepo, secondRepo) => {
+            return getSortValue(secondRepo, sortType) - getSortValue(firstRepo, sortType);
+        });
+    };
+
+    const renderSortedProfile = () => {
+        if (!currentUserData) {
+            return;
+        }
+
+        const sortedRepos = sortRepositories(currentUserRepos, currentSortType);
+        renderProfile(currentUserData, sortedRepos, currentSortType);
+        bindSortSelect();
+    };
+
+    const bindSortSelect = () => {
+        const sortSelect = document.getElementById('sort-select');
+
+        if (!sortSelect) {
+            return;
+        }
+
+        sortSelect.addEventListener('change', (event) => {
+            currentSortType = event.target.value;
+            renderSortedProfile();
+        });
+    };
+
+    const handleSearch = async () => {
+        const userName = inputSearch.value.trim();
+
+        if (!userName) {
+            showError('Por favor, digite um nome de usuário do GitHub.');
+            return;
+        }
+
+        showLoading();
+
+        try {
+            const userData = await fetchUserProfile(userName);
+            const userRepos = await fetchGithubUserRepos(userName);
+
+            currentUserData = userData;
+            currentUserRepos = userRepos;
+            currentSortType = 'lastCommit';
+            renderSortedProfile();
+
+        } catch (error) {
+            console.error('Erro ao buscar perfil do usuário:', error);
+            currentUserData = null;
+            currentUserRepos = [];
+            showError('Usuário não encontrado. Por favor, verifique o nome do usuário e tente novamente.');
+        }
+    };
+
+    btnSearch.addEventListener('click', handleSearch);
+    themeToggle.addEventListener('click', toggleTheme);
+    updateThemeToggle();
+
+    // Permite buscar ao pressionar Enter
+    inputSearch.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleSearch();
+        }
+    });
+})();
